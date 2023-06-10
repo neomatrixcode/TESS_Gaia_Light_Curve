@@ -5,6 +5,7 @@ import pickle
 import numpy as np
 import astropy.units as u
 
+from astropy.io import fits
 from os.path import exists
 from astroquery.gaia import Gaia
 from astroquery.mast import Tesscut
@@ -22,8 +23,9 @@ Gaia.ROW_LIMIT = -1
 Gaia.MAIN_GAIA_TABLE = "gaiadr3.gaia_source"
 
 
+
 class Source_cut(object):
-    def __init__(self, name, size=50, sector=None, cadence=None, limit_mag=None):
+    def __init__(self, name, size=50, sector=None, cadence=None, limit_mag=None, product= 'spoc', directory=''):
         """
         Source_cut object that includes all data from TESS and Gaia DR3
         :param name: str, required
@@ -34,6 +36,7 @@ class Source_cut(object):
         :param cadence: list, required
         list of cadences of TESS FFI
         """
+        #product = 'tica' # 'spoc'
         super(Source_cut, self).__init__()
         if cadence is None:
             cadence = []
@@ -58,27 +61,24 @@ class Source_cut(object):
         coord = SkyCoord(ra=ra, dec=dec, unit=(u.degree, u.degree), frame='icrs')
         radius = u.Quantity((self.size + 6) * 21 * 0.707 / 3600, u.deg)
         print(f'Target Gaia: {target[0]["designation"]}')
-        catalogdata = Gaia.cone_search_async(coord, radius,
-                                             columns=['DESIGNATION', 'phot_g_mean_mag', 'phot_bp_mean_mag',
-                                                      'phot_rp_mean_mag', 'ra', 'dec', 'pmra', 'pmdec']).get_results()
+        catalogdata = Gaia.cone_search_async(coord, radius=radius
+            ,columns=['DESIGNATION', 'phot_g_mean_mag', 'phot_bp_mean_mag','phot_rp_mean_mag', 'ra', 'dec', 'pmra', 'pmdec']
+            ).get_results()
         print(f'Found {len(catalogdata)} Gaia DR3 objects.')
         catalogdata_tic = tic_advanced_search_position_rows(ra=ra, dec=dec, radius=(self.size + 2) * 21 * 0.707 / 3600, limit_mag=limit_mag)
         print(f'Found {len(catalogdata_tic)} TIC objects.')
         self.tic = convert_gaia_id(catalogdata_tic)
-        sector_table = Tesscut.get_sectors(coordinates=coord)
+        sector_table = Tesscut.get_sectors(coordinates=coord, product=product)
+        #print(Tesscut.get_sectors(coordinates=coord, product='spoc'))
         if len(sector_table) == 0:
             warnings.warn('TESS has not observed this position yet :(')
-        print(sector_table)
-        if sector is None:
-            hdulist = Tesscut.get_cutouts(coordinates=coord, size=self.size)
-        elif sector == 'first':
-            hdulist = Tesscut.get_cutouts(coordinates=coord, size=self.size, sector=sector_table['sector'][0])
-            sector = sector_table['sector'][0]
-        elif sector == 'last':
-            hdulist = Tesscut.get_cutouts(coordinates=coord, size=self.size, sector=sector_table['sector'][-1])
-            sector = sector_table['sector'][-1]
-        else:
-            hdulist = Tesscut.get_cutouts(coordinates=coord, size=self.size, sector=sector)
+        print(f'Table of sectors {product.upper()}')
+        print(f'{sector_table}')
+
+
+        array_sector = self.get_sector(sector=sector, sector_table=sector_table)
+        hdulist = self.download_ffi(coord=coord, sector=array_sector[0], product=product, directory=directory,target=self.name)
+
         self.catalogdata = catalogdata
         self.sector_table = sector_table
         self.camera = int(sector_table[0]['camera'])
@@ -88,10 +88,47 @@ class Source_cut(object):
         for i in range(len(hdulist)):
             sector_list.append(hdulist[i][0].header['SECTOR'])
         self.sector_list = sector_list
+        #print(self.sector_list)
         if sector is None:
             self.select_sector(sector=sector_table['sector'][0])
         else:
             self.select_sector(sector=sector)
+
+    def get_sector(self, sector=None, sector_table=None):
+
+        if sector is None:
+            sector=sector_table['sector'].tolist()
+        elif sector == 'first':
+            sector=[sector_table['sector'][0]]
+        elif sector == 'last':
+            sector=[sector_table['sector'][-1]]
+        elif type(sector) == int:
+            sector=[sector]
+        elif type(sector) == list:
+            sector=sector
+
+        return sector
+
+    def download_ffi(self, coord=None, sector=None, product='spoc', directory='', target=''):
+        ffi_loc = f'{directory}ffi/{product}_{target}_sector_{sector}_.fits'
+        #print(ffi_loc)
+        #ffi_exists = exists(ffi_loc)
+        ffi_exists = False
+        if ffi_exists:
+            print(f'Loaded FFI {target} from directory. ')
+        else:
+            print(f'Download sector {sector}..... ')
+            hdulist = Tesscut.get_cutouts(coordinates=coord, size=self.size, sector=sector, product=product)#, path=f'{directory}ffi/')
+            #src_name=manifest['Local Path'][0]
+            #print(src_name)
+            #print(ffi_loc)
+            #os.rename(src_name, ffi_loc)
+            print(f'Download finish.')
+        #hdulist = fits.open(ffi_loc, memmap=False)
+        print(hdulist)
+        print(hdulist[0])
+        print(hdulist[0].info)
+        return hdulist
 
     def select_sector(self, sector=1):
         """
@@ -108,6 +145,10 @@ class Source_cut(object):
 
         index = self.sector_list.index(sector)
         self.sector = sector
+        print(self.sector)
+        print(index)
+        print(self.hdulist[index])
+        print(self.hdulist[index].info())
         hdu = self.hdulist[index]
         self.camera = int(hdu[0].header['CAMERA'])
         self.ccd = int(hdu[0].header['CCD'])
@@ -237,7 +278,7 @@ class Source_cut_pseudo(object):
         self.gaia = gaia_targets
 
 
-def ffi_cut(target='', local_directory='', size=90, sector=None, limit_mag=None):
+def ffi_cut(target='', local_directory='', size=90, sector=None, limit_mag=None, product='spoc'):
     """
     Function to generate Source_cut objects
     :param target: string, required
@@ -266,6 +307,6 @@ def ffi_cut(target='', local_directory='', size=90, sector=None, limit_mag=None)
         print('Loaded ffi_cut from directory. ')
     else:
         with open(f'{local_directory}source/{source_name}.pkl', 'wb') as output:
-            source = Source_cut(target, size=size, sector=sector, limit_mag=limit_mag)
+            source = Source_cut(target, size=size, sector=sector, limit_mag=limit_mag, product=product, directory=local_directory)
             pickle.dump(source, output, pickle.HIGHEST_PROTOCOL)
     return source

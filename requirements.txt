@@ -1,5 +1,5 @@
 astropy~=5.1
-astroquery==0.4.5
+astroquery @ git+https://github.com/astropy/astroquery.git@cfc7383c5a504046057bada22ac860b95512a9b
 matplotlib~=3.3.3
 numpy~=1.22.4
 scipy==1.7.3
@@ -8,3 +8,4 @@ tqdm==4.59.0
 wotan~=1.9
 requests~=2.27.1
 threadpoolctl~=3.1.0
+#astrocut==0.9

@@ -215,6 +215,7 @@ def epsf(source, psf_size=11, factor=2, local_directory='', target=None, cut_x=0
     <1 means emphasizing dimmer stars
     :return:
     """
+    print('Running the epfs function ...')
     if target is None:
         target = f'{cut_x:02d}_{cut_y:02d}'
     A, star_info, over_size, x_round, y_round = get_psf(source, psf_size=psf_size, factor=factor,
@@ -326,6 +327,7 @@ def epsf(source, psf_size=11, factor=2, local_directory='', target=None, cut_x=0
             quality = np.zeros(len(source.time), dtype=np.int16)
             sigma = 1.4826 * np.nanmedian(np.abs(background_ - np.nanmedian(background_)))
             quality[abs(background_ - np.nanmedian(background_)) >= 5 * sigma] += 1
+            print('Ending the epfs function')
             if np.isnan(aper_lc).all():
                 continue
             else:

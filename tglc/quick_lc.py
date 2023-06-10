@@ -11,7 +11,6 @@ from functools import partial
 from tglc.target_lightcurve import epsf
 from tglc.ffi_cut import ffi_cut
 from astroquery.mast import Catalogs
-
 # warnings.simplefilter('ignore', UserWarning)
 from threadpoolctl import ThreadpoolController, threadpool_limits
 import numpy as np
@@ -21,7 +20,7 @@ controller = ThreadpoolController()
 
 @controller.wrap(limits=1, user_api='blas')
 def tglc_lc(target='TIC 264468702', local_directory='', size=90, save_aper=True, limit_mag=16, get_all_lc=False,
-            first_sector_only=False, last_sector_only=False, sector=None, prior=None):
+            first_sector_only=False, last_sector_only=False, sector=None, prior=None, product='spoc'):
     '''
     Generate light curve for a single target.
 
@@ -32,16 +31,18 @@ def tglc_lc(target='TIC 264468702', local_directory='', size=90, save_aper=True,
     :param size: size of the FFI cut, default size is 90. Recommend large number for better quality. Cannot exceed 100.
     :type size: int, optional
     '''
+    local_directory = local_directory+product+'/'
     os.makedirs(local_directory + f'logs/', exist_ok=True)
     os.makedirs(local_directory + f'lc/', exist_ok=True)
     os.makedirs(local_directory + f'epsf/', exist_ok=True)
     os.makedirs(local_directory + f'source/', exist_ok=True)
+    os.makedirs(local_directory + f'ffi/', exist_ok=True)
     if first_sector_only:
         sector = 'first'
     elif last_sector_only:
         sector = 'last'
     source = ffi_cut(target=target, size=size, local_directory=local_directory, sector=sector,
-                     limit_mag=limit_mag)  # sector
+                     limit_mag=limit_mag, product=product)  # sector
     if get_all_lc:
         name = None
     else:
